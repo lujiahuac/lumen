@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-electron/
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+
+# LanceDB
+lancedb/
+
+# Electron
+out/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Env
+.env
+.env.local
+
+# Temp
+*.tmp
+*.log
