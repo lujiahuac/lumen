@@ -6,6 +6,8 @@ export interface LumenAPI {
   sendMessage: (message: string, conversationId?: number | null) => Promise<ChatResponse>
   listConversations: () => Promise<ConversationSummary[]>
   getConversation: (id: number) => Promise<{ conversation: Conversation | null; messages: Message[] }>
+  deleteConversation: (id: number) => Promise<{ success: boolean }>
+  renameConversation: (id: number, title: string) => Promise<{ success: boolean }>
   search: (query: string, limit?: number) => Promise<{ success: boolean; results: SearchResult[]; context: string; error?: string }>
   getConfig: () => Promise<LlmConfig>
   setConfig: (config: Partial<LlmConfig>) => Promise<{ success: boolean }>

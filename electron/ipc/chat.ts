@@ -101,10 +101,28 @@ export function registerChatHandlers() {
     if (!conversation) {
       return { conversation: null, messages: [] };
     }
-    const messages = db
-      .prepare('SELECT id, role, content, sources, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC')
-      .all(id);
+    const rows = db
+      .prepare('SELECT id, conversation_id, role, content, sources, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC')
+      .all(id) as any[];
+    const messages = rows.map((row) => ({
+      ...row,
+      sources: row.sources ? JSON.parse(row.sources) : null,
+    }));
     return { conversation, messages };
+  });
+
+  // 删除对话
+  ipcMain.handle('chat:delete', async (_event, { id }) => {
+    const db = getDb();
+    db.prepare('DELETE FROM conversations WHERE id = ?').run(id);
+    return { success: true };
+  });
+
+  // 重命名对话
+  ipcMain.handle('chat:rename', async (_event, { id, title }) => {
+    const db = getDb();
+    db.prepare('UPDATE conversations SET title = ?, updated_at = datetime(\'now\') WHERE id = ?').run(title, id);
+    return { success: true };
   });
 
   // 发送消息（核心）

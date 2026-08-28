@@ -19,6 +19,8 @@ interface AppState {
   loadConversations: () => Promise<void>;
   selectConversation: (id: number) => Promise<void>;
   newConversation: () => void;
+  deleteConversation: (id: number) => Promise<void>;
+  renameConversation: (id: number, title: string) => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
 
   // 设置
@@ -65,6 +67,25 @@ export const useStore = create<AppState>((set, get) => ({
 
   newConversation: () => {
     set({ currentConversationId: null, messages: [] });
+  },
+
+  deleteConversation: async (id) => {
+    await window.lumen.deleteConversation(id);
+    set((s) => ({
+      conversations: s.conversations.filter((c) => c.id !== id),
+      ...(s.currentConversationId === id
+        ? { currentConversationId: null, messages: [] }
+        : {}),
+    }));
+  },
+
+  renameConversation: async (id, title) => {
+    await window.lumen.renameConversation(id, title);
+    set((s) => ({
+      conversations: s.conversations.map((c) =>
+        c.id === id ? { ...c, title } : c
+      ),
+    }));
   },
 
   sendMessage: async (text) => {

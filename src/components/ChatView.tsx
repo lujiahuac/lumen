@@ -30,7 +30,7 @@ function MessageBubble({ msg }: { msg: Message }) {
             dangerouslySetInnerHTML={{ __html: html }}
           />
         )}
-        {msg.sources && msg.sources.length > 0 && (
+        {Array.isArray(msg.sources) && msg.sources.length > 0 && (
           <div className="message-sources">
             <div className="sources-label">引用来源：</div>
             {msg.sources.map((src, i) => (

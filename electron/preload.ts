@@ -13,6 +13,8 @@ const api = {
     ipcRenderer.invoke('chat:send', { message, conversationId }),
   listConversations: () => ipcRenderer.invoke('chat:list'),
   getConversation: (id: number) => ipcRenderer.invoke('chat:get', { id }),
+  deleteConversation: (id: number) => ipcRenderer.invoke('chat:delete', { id }),
+  renameConversation: (id: number, title: string) => ipcRenderer.invoke('chat:rename', { id, title }),
 
   // 搜索
   search: (query: string, limit?: number) =>
