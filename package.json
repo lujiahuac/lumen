@@ -7,10 +7,41 @@
   "license": "MIT",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && electron-builder",
+    "build": "vite build",
+    "dist": "npm run build && electron-builder --win",
     "preview": "vite preview",
     "electron:dev": "vite",
     "electron:build": "tsc && vite build"
+  },
+  "build": {
+    "appId": "com.lumen.app",
+    "productName": "Lumen",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Lumen"
+    }
   },
   "dependencies": {
     "@lancedb/lancedb": "^0.37.0",
@@ -30,6 +61,7 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "33.2.0",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.7.2",
     "vite": "^6.0.0",
     "vite-plugin-electron": "^0.29.0",

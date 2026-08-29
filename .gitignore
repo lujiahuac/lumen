@@ -15,6 +15,7 @@ lancedb/
 
 # Electron
 out/
+release/
 
 # OS
 Thumbs.db

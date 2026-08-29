@@ -818,3 +818,57 @@ body {
   border: 1px solid var(--error);
   color: var(--error);
 }
+
+/* ===== Model status bar ===== */
+.model-status-bar {
+  padding: 8px 16px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.model-status-bar.model-downloading {
+  background: rgba(79, 195, 247, 0.08);
+  color: var(--accent);
+}
+.model-status-bar.model-loading {
+  background: rgba(255, 184, 107, 0.08);
+  color: var(--warning);
+}
+.model-status-bar.model-error {
+  background: rgba(255, 123, 123, 0.1);
+  color: var(--error);
+}
+.model-progress {
+  display: inline-block;
+  width: 120px;
+  height: 5px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+.model-progress-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2, #ab63f5));
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+/* ===== Streaming cursor ===== */
+.stream-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 16px;
+  background: var(--accent);
+  margin-left: 3px;
+  vertical-align: text-bottom;
+  animation: blink 0.9s steps(2) infinite;
+  border-radius: 1px;
+}
+@keyframes blink {
+  50% { opacity: 0; }
+}

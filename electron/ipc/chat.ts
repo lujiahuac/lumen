@@ -1,21 +1,23 @@
-// 对话 IPC：发送消息、检索上下文、调用 LLM、返回回答
-import { ipcMain } from 'electron';
+// 对话 IPC：发送消息、检索上下文、调用 LLM（流式）、返回回答
+import { ipcMain, BrowserWindow } from 'electron';
 import { getDb } from '../db';
 import { retrieve } from '../rag/retriever';
 import { buildMessages } from '../rag/prompt';
 import { getLlmConfig } from '../config';
+import { getEmbedderStatus } from '../rag/embedder';
 
 // 规范化 Base URL：去除末尾斜杠
 function normalizeBaseUrl(url: string): string {
   return url.trim().replace(/\/+$/, '');
 }
 
-// 调用 OpenAI 兼容 API
-async function callLlm(
+// 流式调用：解析 SSE，通过 onChunk 回调逐段吐出文本
+async function callLlmStream(
   messages: { role: string; content: string }[],
   apiKey: string,
   baseUrl: string,
-  model: string
+  model: string,
+  onChunk: (delta: string) => void
 ): Promise<string> {
   const url = `${normalizeBaseUrl(baseUrl)}/chat/completions`;
 
@@ -32,18 +34,14 @@ async function callLlm(
         messages,
         temperature: 0.3,
         max_tokens: 1024,
-        stream: false,
+        stream: true,
       }),
     });
   } catch (err: any) {
-    // fetch 层面的网络错误
     const cause = err.cause?.message || err.message || '';
     if (cause.includes('ENOTFOUND') || cause.includes('ECONNREFUSED') || cause.includes('fetch failed')) {
       throw new Error(
-        `无法连接到 API 服务器（${baseUrl}）。请检查：\n` +
-        `1. Base URL 是否正确\n` +
-        `2. 网络是否正常（国内访问 OpenAI 需要代理）\n` +
-        `3. 防火墙是否拦截`
+        `无法连接到 API 服务器（${baseUrl}）。请检查网络或 Base URL 配置`
       );
     }
     if (cause.includes('CERT') || cause.includes('certificate')) {
@@ -60,25 +58,56 @@ async function callLlm(
     } catch {
       errorDetail = await response.text().catch(() => '');
     }
-
-    if (response.status === 401) {
-      throw new Error('API Key 无效或已过期，请检查设置中的 API Key');
-    }
-    if (response.status === 404) {
-      throw new Error(`API 地址返回 404，请检查 Base URL 和模型名称是否正确（当前模型: ${model}）`);
-    }
-    if (response.status === 429) {
-      throw new Error('请求过于频繁或额度已用完，请稍后再试或检查账户余额');
-    }
+    if (response.status === 401) throw new Error('API Key 无效或已过期，请检查设置中的 API Key');
+    if (response.status === 404) throw new Error(`API 地址返回 404，请检查 Base URL 和模型名称（当前模型: ${model}）`);
+    if (response.status === 429) throw new Error('请求过于频繁或额度已用完，请稍后再试或检查账户余额');
     throw new Error(`API 返回错误 ${response.status}: ${errorDetail}`);
   }
 
-  const data: any = await response.json();
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) {
+  if (!response.body) {
+    // 端点不支持流式，降级为非流式
+    const data: any = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    if (content) onChunk(content);
+    return content;
+  }
+
+  // 解析 SSE 流：data: {...}\n\n 分行，[DONE] 结束
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let full = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      const payload = trimmed.slice(5).trim();
+      if (payload === '[DONE]') continue;
+      try {
+        const json = JSON.parse(payload);
+        const delta = json.choices?.[0]?.delta?.content;
+        if (delta) {
+          full += delta;
+          onChunk(delta);
+        }
+      } catch {
+        // 非 JSON 行（如 keep-alive 注释）忽略
+      }
+    }
+  }
+
+  if (!full) {
     throw new Error('API 返回了空回复，请检查模型名称是否正确');
   }
-  return content;
+  return full;
 }
 
 export function registerChatHandlers() {
@@ -125,10 +154,11 @@ export function registerChatHandlers() {
     return { success: true };
   });
 
-  // 发送消息（核心）
-  ipcMain.handle('chat:send', async (_event, { message, conversationId }) => {
+  // 发送消息（流式）
+  ipcMain.handle('chat:send', async (event, { message, conversationId }) => {
     const db = getDb();
     const config = getLlmConfig();
+    const win = BrowserWindow.fromWebContents(event.sender);
 
     if (!config.apiKey) {
       return { success: false, error: '请先在设置中配置 API Key' };
@@ -153,6 +183,10 @@ export function registerChatHandlers() {
       'INSERT INTO messages (conversation_id, role, content) VALUES (?, ?, ?)'
     ).run(convId, 'user', message);
 
+    const sendChunk = (delta: string) => {
+      win?.webContents.send('chat:chunk', { conversationId: convId, delta });
+    };
+
     try {
       // 检索相关文档
       const { results, context } = await retrieve(message, 6);
@@ -166,12 +200,13 @@ export function registerChatHandlers() {
       // 构建 prompt
       const messages = buildMessages(message, context, history);
 
-      // 调用 LLM
-      const answer = await callLlm(
+      // 流式调用 LLM
+      const answer = await callLlmStream(
         messages,
         config.apiKey,
         config.baseUrl,
-        config.model
+        config.model,
+        sendChunk
       );
 
       // 保存 AI 回复
@@ -189,6 +224,12 @@ export function registerChatHandlers() {
       // 更新对话时间
       db.prepare("UPDATE conversations SET updated_at = datetime('now') WHERE id = ?").run(convId);
 
+      // 通知前端流结束
+      win?.webContents.send('chat:done', {
+        conversationId: convId,
+        sources,
+      });
+
       return {
         success: true,
         conversationId: convId,
@@ -197,7 +238,16 @@ export function registerChatHandlers() {
       };
     } catch (err: any) {
       console.error('[Lumen] Chat failed:', err);
-      return { success: false, error: err.message };
+      win?.webContents.send('chat:error', {
+        conversationId: convId,
+        error: err.message,
+      });
+      return { success: false, error: err.message, conversationId: convId };
     }
+  });
+
+  // 获取本地模型状态
+  ipcMain.handle('embedder:status', async () => {
+    return { status: getEmbedderStatus() };
   });
 }

@@ -8,6 +8,15 @@ export interface LumenAPI {
   getConversation: (id: number) => Promise<{ conversation: Conversation | null; messages: Message[] }>
   deleteConversation: (id: number) => Promise<{ success: boolean }>
   renameConversation: (id: number, title: string) => Promise<{ success: boolean }>
+
+  // 流式回复事件
+  onChatChunk: (cb: (data: { conversationId: number; delta: string }) => void) => () => void
+  onChatDone: (cb: (data: { conversationId: number; sources: Source[] }) => void) => () => void
+  onChatError: (cb: (data: { conversationId: number; error: string }) => void) => () => void
+
+  // 本地模型状态
+  getEmbedderStatus: () => Promise<{ status: EmbedderStatus }>
+  onEmbedderStatus: (cb: (data: { status: EmbedderStatus; progress?: number; message?: string }) => void) => () => void
   search: (query: string, limit?: number) => Promise<{ success: boolean; results: SearchResult[]; context: string; error?: string }>
   getConfig: () => Promise<LlmConfig>
   setConfig: (config: Partial<LlmConfig>) => Promise<{ success: boolean }>
@@ -77,6 +86,8 @@ export interface LlmConfig {
   baseUrl: string
   model: string
 }
+
+export type EmbedderStatus = 'downloading' | 'loading' | 'ready' | 'error'
 
 declare global {
   interface Window {

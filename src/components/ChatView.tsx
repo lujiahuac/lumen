@@ -9,7 +9,7 @@ marked.setOptions({
   gfm: true,
 })
 
-function MessageBubble({ msg }: { msg: Message }) {
+function MessageBubble({ msg, streaming }: { msg: Message; streaming?: boolean }) {
   const isUser = msg.role === 'user'
   const html = useMemo(
     () => isUser ? msg.content : (marked.parse(msg.content, { async: false }) as string),
@@ -30,6 +30,7 @@ function MessageBubble({ msg }: { msg: Message }) {
             dangerouslySetInnerHTML={{ __html: html }}
           />
         )}
+        {streaming && <span className="stream-cursor" />}
         {Array.isArray(msg.sources) && msg.sources.length > 0 && (
           <div className="message-sources">
             <div className="sources-label">引用来源：</div>
@@ -49,13 +50,17 @@ export default function ChatView() {
   const [input, setInput] = useState('')
   const messages = useStore((s) => s.messages)
   const sending = useStore((s) => s.sending)
+  const streamingContent = useStore((s) => s.streamingContent)
   const sendMessage = useStore((s) => s.sendMessage)
   const currentConvId = useStore((s) => s.currentConversationId)
+  const modelStatus = useStore((s) => s.modelStatus)
+  const modelProgress = useStore((s) => s.modelProgress)
+  const modelMessage = useStore((s) => s.modelMessage)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messages, streamingContent])
 
   const handleSend = async () => {
     const text = input.trim()
@@ -77,8 +82,26 @@ export default function ChatView() {
         <h2>{currentConvId ? '' : '新对话'}</h2>
       </div>
 
+      {modelStatus !== 'ready' && (
+        <div className={`model-status-bar model-${modelStatus}`}>
+          {modelStatus === 'downloading' && (
+            <span>
+              ⬇️ {modelMessage || '正在下载本地模型'}
+              {typeof modelProgress === 'number' ? ` ${modelProgress}%` : ''}
+              <span className="model-progress">
+                <span className="model-progress-fill" style={{ width: `${modelProgress || 0}%` }} />
+              </span>
+            </span>
+          )}
+          {modelStatus === 'loading' && <span>⏳ {modelMessage || '正在加载本地模型...'}</span>}
+          {modelStatus === 'error' && (
+            <span>⚠️ 本地模型加载失败，文档检索不可用，请重启应用或检查网络（{modelMessage}）</span>
+          )}
+        </div>
+      )}
+
       <div className="chat-messages">
-        {messages.length === 0 && (
+        {messages.length === 0 && !streamingContent && (
           <div className="chat-empty">
             <div className="empty-icon">💡</div>
             <p>导入文档后，随时向我提问</p>
@@ -87,7 +110,19 @@ export default function ChatView() {
         {messages.map((msg) => (
           <MessageBubble key={msg.id} msg={msg} />
         ))}
-        {sending && (
+        {sending && streamingContent && (
+          <MessageBubble
+            msg={{
+              id: -1,
+              conversation_id: currentConvId || 0,
+              role: 'assistant',
+              content: streamingContent,
+              created_at: new Date().toISOString(),
+            }}
+            streaming
+          />
+        )}
+        {sending && !streamingContent && (
           <div className="message assistant">
             <div className="message-avatar">AI</div>
             <div className="message-bubble">

@@ -10,11 +10,14 @@ function App() {
   const loadConversations = useStore((s) => s.loadConversations)
   const loadDocuments = useStore((s) => s.loadDocuments)
   const loadConfig = useStore((s) => s.loadConfig)
+  const initModelListener = useStore((s) => s.initModelListener)
 
   useEffect(() => {
     loadConversations()
     loadDocuments()
     loadConfig()
+    const off = initModelListener()
+    return off
   }, [])
 
   return (
